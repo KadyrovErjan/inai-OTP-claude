@@ -1,0 +1,46 @@
+# Cross-platform one-command start:  docker compose up --build
+#
+# NOTE on client IPs: with Docker's default bridge network / port publishing, the API
+# sees the Docker gateway (e.g. 172.18.0.1) instead of 127.0.0.1 / 127.0.0.2, so all
+# clients share one IP bucket. For the jury IP checks on Linux use either the direct
+# launch (scripts/run_jury.sh) or docker-compose.jury.yml (host networking).
+name: otp-secure
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: .
+    user: "${OTP_UID:-1000}:${OTP_GID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      HOST: 0.0.0.0
+      PORT: "8000"
+      TRUST_PROXY_HEADERS: "false"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./outbox:/app/outbox   # OTPs appear on the host in ./outbox/sms.jsonl
+      - ./data:/app/data       # auto-generated secrets persist across restarts
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis-data:

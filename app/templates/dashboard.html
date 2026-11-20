@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>OTP Secure — Security Dashboard</title>
+  <link rel="preload" href="/static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/boot.js"></script>
+</head>
+<body>
+  <header class="header" id="header">
+    <div class="header-inner">
+      <a class="brand" href="/demo" aria-label="OTP Secure — на главную">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2.75 4.75 5.5v5.6c0 4.6 3.05 8.6 7.25 10.15 4.2-1.55 7.25-5.55 7.25-10.15V5.5L12 2.75Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="m8.75 12.25 2.25 2.25 4.25-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>OTP Secure</span>
+      </a>
+      <nav class="nav" aria-label="Основная навигация">
+        <a href="/demo">Demo</a><a href="/docs">API</a><a href="#" id="logout">Выйти</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="dash" id="dashboard">
+    <div class="dash-head">
+      <div>
+        <h1 class="title">Security Dashboard</h1>
+        <p class="sub">Коды OTP, номера и IP никогда не отображаются — только HMAC-псевдонимы.</p>
+      </div>
+      <div class="toolbar">
+        <label class="sr-only" for="event-filter">Фильтр событий</label>
+        <select class="select" id="event-filter">
+          <option value="">Все события</option>
+          <option>OTP_CREATED</option>
+          <option>OTP_RESENT</option>
+          <option>OTP_VERIFIED</option>
+          <option>OTP_INVALID</option>
+          <option>OTP_EXPIRED</option>
+          <option>OTP_REUSED</option>
+          <option>OTP_REPLACED</option>
+          <option>PHONE_BLOCKED</option>
+          <option>SEND_RATE_LIMITED</option>
+          <option>IP_RATE_LIMITED</option>
+          <option>OUTBOX_FAILURE</option>
+        </select>
+        <label class="switch"><input type="checkbox" id="auto-refresh" checked> Авто · 5 с</label>
+        <button class="btn btn-secondary btn-quiet btn-icon" id="refresh" type="button" aria-label="Обновить">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Обновить
+        </button>
+      </div>
+    </div>
+
+    <section class="kpis" aria-label="Счётчики">
+      <div class="kpi k-blue"><div class="kpi-label"><i></i>Выдано OTP</div><div class="kpi-value" id="k-issued">—</div></div>
+      <div class="kpi k-green"><div class="kpi-label"><i></i>Успешных проверок</div><div class="kpi-value" id="k-verified">—</div></div>
+      <div class="kpi k-amber"><div class="kpi-label"><i></i>Неудачных проверок</div><div class="kpi-value" id="k-failed">—</div></div>
+      <div class="kpi k-red"><div class="kpi-label"><i></i>Блокировок</div><div class="kpi-value" id="k-blocks">—</div></div>
+      <div class="kpi k-red"><div class="kpi-label"><i></i>Rate limit</div><div class="kpi-value" id="k-limited">—</div></div>
+    </section>
+
+    <section class="panel" aria-labelledby="events-title">
+      <div class="panel-head">
+        <h2 id="events-title">Последние события</h2>
+        <span class="muted" id="updated" aria-live="polite"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Время, UTC</th><th scope="col">Событие</th><th scope="col">Номер</th><th scope="col">IP</th><th scope="col">Детали</th></tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="empty" hidden>Событий пока нет. Отправьте код на странице Demo.</div>
+    </section>
+  </main>
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>

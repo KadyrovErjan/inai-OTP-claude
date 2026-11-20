@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fafafb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b0b0e" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="OTP Secure — одноразовые коды с защитой от перебора, спама и гонок.">
+  <title>OTP Secure — подтверждение номера</title>
+  <link rel="preload" href="/static/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/inter-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="/static/js/boot.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" class="sr-only" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="ring-grad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#2f5bff"/>
+        <stop offset="1" stop-color="#6e56f8"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="page-glow" aria-hidden="true"><div class="glow"></div></div>
+
+  <header class="header" id="header">
+    <div class="header-inner">
+      <a class="brand" href="/demo" aria-label="OTP Secure — на главную">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2.75 4.75 5.5v5.6c0 4.6 3.05 8.6 7.25 10.15 4.2-1.55 7.25-5.55 7.25-10.15V5.5L12 2.75Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="m8.75 12.25 2.25 2.25 4.25-4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>OTP Secure</span>
+      </a>
+      <nav class="nav" aria-label="Основная навигация">
+        <a href="#security">Защита</a>
+        <a href="/docs">API</a>
+        <a href="/admin/dashboard">Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <span class="badge reveal d1"><span class="badge-dot">Task 6</span>INAI Autumn Hackathon 2026</span>
+        <h1 class="display" id="hero-title">
+          <span class="line"><span class="d2">Одноразовые коды.</span></span>
+          <span class="line"><span class="d3 muted">Ни единого шанса</span></span>
+          <span class="line"><span class="d4 muted">на перебор.</span></span>
+        </h1>
+        <p class="lead reveal d4">Шестизначный код живёт 120 секунд, хранится только как HMAC и подтверждается ровно один раз — даже если сто запросов придут одновременно.</p>
+        <div class="chips reveal d5" aria-label="Ключевые ограничения">
+          <span class="chip"><strong>5</strong> попыток на номер</span>
+          <span class="chip"><strong>20</strong> проверок / мин на IP</span>
+          <span class="chip"><strong>120 с</strong> жизнь кода</span>
+        </div>
+      </div>
+
+      <!-- OTP flow -->
+      <section class="card card-enter d6" id="card" aria-label="Подтверждение номера">
+        <div class="card-top">
+          <div class="steps" aria-hidden="true"><span class="on" id="step-1"></span><span id="step-2"></span><span id="step-3"></span></div>
+          <span class="card-tag" id="card-tag">POST /otp/send</span>
+        </div>
+
+        <div class="screens">
+          <!-- 1. phone -->
+          <div class="screen is-active" id="screen-phone" aria-hidden="false">
+            <h2 class="title">Подтверждение номера</h2>
+            <p class="sub">Отправим 6-значный код. Он действует 2 минуты.</p>
+            <form id="phone-form" novalidate>
+              <div class="field">
+                <label class="label" for="msisdn">Номер телефона</label>
+                <input class="input" id="msisdn" name="msisdn" type="tel" inputmode="tel" autocomplete="tel"
+                       placeholder="+996 700 123 456" spellcheck="false" required aria-describedby="phone-banner">
+              </div>
+              <div class="banner-slot" id="phone-banner" aria-live="polite"></div>
+              <button class="btn btn-primary" id="send-btn" type="submit">
+                <span class="btn-label">Получить код</span>
+                <span class="btn-spinner" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".3" stroke-width="2.5"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></span>
+              </button>
+            </form>
+            <p class="note">Демо-режим: SMS не отправляется. Код записывается на сервере в <code>outbox/sms.jsonl</code>.</p>
+          </div>
+
+          <!-- 2. code -->
+          <div class="screen" id="screen-code" aria-hidden="true">
+            <button class="btn btn-quiet back" id="back-btn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Изменить номер
+            </button>
+            <h2 class="title">Введите код</h2>
+            <p class="sub">Отправлен на <strong id="phone-label"></strong></p>
+            <form id="code-form" novalidate>
+              <fieldset class="otp" id="otp" aria-label="Код из 6 цифр">
+                <input class="cell" inputmode="numeric" autocomplete="one-time-code" aria-label="Цифра 1" pattern="[0-9]*">
+                <input class="cell" inputmode="numeric" autocomplete="off" aria-label="Цифра 2" pattern="[0-9]*">
+                <input class="cell" inputmode="numeric" autocomplete="off" aria-label="Цифра 3" pattern="[0-9]*">
+                <input class="cell" inputmode="numeric" autocomplete="off" aria-label="Цифра 4" pattern="[0-9]*">
+                <input class="cell" inputmode="numeric" autocomplete="off" aria-label="Цифра 5" pattern="[0-9]*">
+                <input class="cell" inputmode="numeric" autocomplete="off" aria-label="Цифра 6" pattern="[0-9]*">
+              </fieldset>
+              <div class="meta">
+                <span class="timer" id="timer">
+                  <svg class="ring" viewBox="0 0 28 28" aria-hidden="true"><circle class="ring-track" cx="14" cy="14" r="11"/><circle class="ring-value" id="ring" cx="14" cy="14" r="11"/></svg>
+                  <span>Код действует <span class="timer-value" id="ttl-label">2:00</span></span>
+                </span>
+                <button class="btn btn-quiet" id="resend-btn" type="button" disabled>Отправить снова</button>
+              </div>
+              <div class="banner-slot" id="code-banner" aria-live="polite"></div>
+              <button class="btn btn-primary" id="verify-btn" type="submit" disabled>
+                <span class="btn-label">Подтвердить</span>
+                <span class="btn-spinner" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".3" stroke-width="2.5"/><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></span>
+              </button>
+            </form>
+          </div>
+
+          <!-- 3. success -->
+          <div class="screen center" id="screen-success" aria-hidden="true">
+            <div class="mark mark-success" aria-hidden="true">
+              <svg viewBox="0 0 84 84"><circle class="disc" cx="42" cy="42" r="42"/><path class="tick" d="M29 43l9 9 18-19"/></svg>
+            </div>
+            <h2 class="title">Номер подтверждён</h2>
+            <p class="sub" id="success-phone"></p>
+            <p class="note">Код погашен и больше не будет принят — повторная проверка вернёт 410.</p>
+            <button class="btn btn-secondary restart-btn" type="button">Начать заново</button>
+          </div>
+
+          <!-- 4. blocked -->
+          <div class="screen center" id="screen-blocked" aria-hidden="true">
+            <div class="mark mark-lock" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10.5V8a3.5 3.5 0 1 1 7 0v2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </div>
+            <h2 class="title">Номер заблокирован</h2>
+            <p class="sub" id="blocked-reason">5 неверных кодов подряд.</p>
+            <div class="countdown" id="blocked-timer" role="timer" aria-live="off">15:00</div>
+            <p class="note">Проверка и отправка кода для этого номера недоступны до конца блокировки. Смена IP или новый код её не снимают.</p>
+            <button class="btn btn-primary" type="button" disabled>Подтвердить</button>
+            <button class="btn btn-secondary restart-btn" type="button">Другой номер</button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="section" id="security" aria-labelledby="security-title">
+      <div class="section-head">
+        <span class="eyebrow">Как устроена защита</span>
+        <h2 class="h2" id="security-title">Шесть слоёв между атакующим и вашим кодом</h2>
+        <p>Каждое ограничение хранится в Redis и проверяется атомарно — перезапуск сервера, смена IP или параллельные запросы ничего не обнуляют.</p>
+      </div>
+      <div class="features in-view-group">
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+          <h3>Только HMAC-хеш</h3>
+          <p>Код не хранится нигде, кроме SMS. В Redis — HMAC-SHA256 с секретным ключом, сравнение через <code>compare_digest</code>.</p>
+          <span class="stat">secrets · HMAC-SHA256</span>
+        </article>
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M12 9v4l2.5 2M10 2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          <h3>120 секунд жизни</h3>
+          <p>Срок задаётся TTL в Redis, а не таймером в браузере. Новый код сразу аннулирует предыдущий.</p>
+          <span class="stat">TTL 120 s · single use</span>
+        </article>
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 18h4V12H4zM10 18h4V8h-4zM16 18h4V4h-4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+          <h3>Растущие паузы</h3>
+          <p>Между отправками 30, затем 60, затем 120 секунд. Не больше трёх кодов за 10 минут.</p>
+          <span class="stat">30 → 60 → 120 s · 3 / 10 min</span>
+        </article>
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="M6 6l12 12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+          <h3>Блокировка на 15 минут</h3>
+          <p>Пятый неверный код блокирует номер. Атакованный код уничтожается — продолжить после блокировки нельзя.</p>
+          <span class="stat">5 attempts · 900 s</span>
+        </article>
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l3-7 4 14 3-7h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <h3>Лимит по реальному IP</h3>
+          <p>20 проверок в минуту с адреса TCP-соединения, суммарно по всем номерам. <code>X-Forwarded-For</code> игнорируется.</p>
+          <span class="stat">20 / 60 s · per peer IP</span>
+        </article>
+        <article class="feature">
+          <span class="feature-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+          <h3>Атомарно в Lua</h3>
+          <p>Проверка, гашение кода и счётчик ошибок — один Redis-скрипт. Из 100 одновременных запросов успешен ровно один.</p>
+          <span class="stat">100 parallel → 1 × 200</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="limits" aria-labelledby="attack-title">
+      <div class="attack">
+        <div>
+          <span class="eyebrow">Распределённый перебор</span>
+          <h2 class="h2" id="attack-title">50 номеров с одного IP? Двадцать первая попытка не дойдёт.</h2>
+          <p class="sub">Смена номера не обнуляет лимит адреса. Перебор миллиона комбинаций превращается в 20 попыток в минуту.</p>
+        </div>
+        <div class="attack-board" id="attack" aria-label="Визуализация лимита проверок">
+          <div class="attempts" id="attempts" aria-hidden="true"></div>
+          <div class="attack-legend" aria-hidden="true">
+            <span><i class="l-ok"></i>дошла до сервиса</span>
+            <span><i class="l-no"></i>отклонена · 429</span>
+          </div>
+          <p class="attack-result" id="attack-result" aria-live="polite">&nbsp;</p>
+          <button class="btn btn-secondary replay" id="attack-replay" type="button">Повторить</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>OTP Secure · INAI Autumn Hackathon 2026</span>
+    <span>HMAC-SHA256 · Redis Lua · FastAPI</span>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

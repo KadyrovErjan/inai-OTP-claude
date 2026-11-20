@@ -1,0 +1,12 @@
+# secrets
+.env
+data/
+# demo SMS outbox contains real OTPs - never commit
+outbox/*
+!outbox/.gitkeep
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
