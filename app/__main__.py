@@ -3,7 +3,7 @@
 Runs Uvicorn directly (no reverse proxy) with proxy-header processing disabled, so
 the client IP is the real TCP peer address. Equivalent to::
 
-    uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+    uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers --no-access-log
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ def main() -> None:
         proxy_headers=settings.trust_proxy_headers,
         forwarded_allow_ips="" if not settings.trust_proxy_headers else None,
         server_header=False,
+        access_log=False,  # never write client IPs to stdout
     )
 
 

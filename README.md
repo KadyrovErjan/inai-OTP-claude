@@ -9,61 +9,64 @@ REST API выдаёт и проверяет 6-значные OTP. Сервис �
 
 ---
 
-## Коротко для жюри: ответы на три пункта уточнения
+## 1. Запуск для жюри — только Docker
+
+Нужны **Docker** и **Docker Compose v2** на Linux. Python, Redis и файл `.env` ставить и создавать **не нужно**: все настройки, включая демо-ключи, уже прописаны в `docker-compose.yml`.
+
+```bash
+git clone https://github.com/KadyrovErjan/inai-OTP-claude.git
+cd inai-OTP-claude
+docker compose up -d --build
+```
+
+Проверка, что всё поднялось (через 5–10 секунд после старта):
+
+```bash
+docker compose ps                    # api и redis в статусе (healthy)
+curl -s http://127.0.0.1:8000/health
+# {"status":"ok","redis":"up","env":"development","outbox_enabled":true}
+```
+
+Что запускается:
+
+| Сервис | Адрес | Назначение |
+|---|---|---|
+| `api` | `http://127.0.0.1:8000` | FastAPI: `/otp/send`, `/otp/verify`, `/demo`, `/docs`, `/admin/dashboard` |
+| `redis` | `127.0.0.1:6390` | хранилище состояния (порт 6390, чтобы не мешать вашему Redis на 6379) |
+
+Оба контейнера работают в **host-сети** (`network_mode: host`). Поэтому API видит **настоящий адрес TCP-соединения**: `127.0.0.1` и `127.0.0.2` — разные клиенты, NAT нет.
+
+Коды («SMS») пишутся в **`./outbox/sms.jsonl` в корне клонированного проекта**. Контейнер пишет файл от имени владельца папки `outbox/` (того, кто клонировал репозиторий), поэтому файл читается без `sudo`.
+
+**Демо-ключи** (заданы в `docker-compose.yml`, `.env` не нужен):
+
+| Переменная | Значение | Для чего |
+|---|---|---|
+| `ADMIN_API_KEY` | `inai2026-demo-admin-key-3e8b5d1f7a2c9064` | вход в панель http://127.0.0.1:8000/admin/dashboard и заголовок `X-Admin-Key` |
+| `OTP_HMAC_KEY` | `inai2026-demo-hmac-key-9f4c2a7e1b8d6053c4a1e7f2b9d8c6a5` | HMAC кодов и псевдонимов в Redis |
+
+> Это демо-значения только для стенда хакатона. Для реального развёртывания их нужно заменить своими.
+
+Управление:
+
+```bash
+docker compose logs -f api           # логи API (IP клиентов и коды в лог не пишутся)
+docker compose restart api           # перезапуск API — лимиты и блокировки сохраняются в Redis
+docker compose down                  # остановить
+docker compose down -v               # остановить и стереть состояние Redis (чистый старт для нового прогона)
+```
+
+Порты можно сменить без правки файлов: `API_PORT=8010 REDIS_PORT=6391 docker compose up -d --build`. Тогда во всех примерах ниже замените `8000` на `8010`.
+
+---
+
+## Ответы на три пункта уточнения жюри
 
 | Пункт уточнения | Как сделано в сервисе |
 |---|---|
 | **1. IP берётся из подключения** | IP клиента — это адрес TCP-соединения (`request.client.host`). Заголовки `X-Forwarded-For`, `X-Real-IP` и `Forwarded` **не читаются**, даже если их прислать. IP-адреса и номера телефонов в коде не прописаны: у `127.0.0.1` и `127.0.0.2` просто разные счётчики. |
 | **2. `advance: 120`** | Время **реальное**, нужно просто подождать. Срок жизни кода — TTL ключа в Redis. **Режима с подменой часов нет**, эндпоинтов вроде `/advance` тоже нет. |
-| **3. Где взять OTP** | Файл **`outbox/sms.jsonl` в корне проекта** (JSON Lines, одна строка — одно SMS). Строка записывается на диск **до** ответа HTTP 200. Путь по умолчанию менять не нужно. |
-
----
-
-## 1. Быстрый старт на Linux
-
-**Нужно:**
-* Python 3.12 (с модулем `venv`);
-* Redis 6 или 7;
-* `curl`.
-
-Порядок ниже проверен на чистом клоне в Ubuntu 24.04: Python 3.12.3, Redis 7.0.15.
-
-```bash
-# 0. перейти в корень проекта (где лежит этот README)
-cd inai-OTP-claude
-
-# 1. окружение и зависимости
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. Redis на 127.0.0.1:6379 — любой вариант
-redis-cli ping || redis-server --bind 127.0.0.1 --port 6379 --daemonize yes
-#   или: docker run -d --name otp-redis -p 127.0.0.1:6379:6379 redis:7-alpine
-
-# 3. .env со случайными секретами (права 600)
-python scripts/init_env.py
-
-# 4. запуск API
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers --no-access-log
-```
-
-На шаге 2 команда `redis-cli ping` выведет `PONG`, если Redis уже запущен. Если Redis нет, команда сообщит об ошибке, и сработает `redis-server`.
-
-Проверка в другом терминале:
-
-```bash
-curl -s http://127.0.0.1:8000/health
-# {"status":"ok","redis":"up","env":"development","outbox_enabled":true}
-```
-
-При старте сервис сам создаёт `outbox/` с правами `0700` и `outbox/sms.jsonl` с правами `0600`. Абсолютный путь к файлу выводится в лог строкой `DEMO SMS outbox enabled: OTPs are written to …`.
-
-> Если порт 8000 занят: `--port 8010`, тогда во всех примерах ниже замените `8000` на `8010`.
->
-> Флаг `--no-proxy-headers` обязателен по смыслу: без него Uvicorn доверяет `X-Forwarded-For` от `127.0.0.1`. Сервис и так отключает это сам, но флаг делает поведение явным. `--no-access-log` убирает из консоли строки с IP-адресами клиентов.
->
-> `APP_ENV` принимает только `development` (по умолчанию), `test` или `production`. Для проверки ничего задавать не нужно.
+| **3. Где взять OTP** | Файл **`outbox/sms.jsonl` в корне проекта** (JSON Lines, одна строка — одно SMS). Строка записывается на диск **до** ответа HTTP 200. Путь менять не нужно. |
 
 ---
 
@@ -173,13 +176,7 @@ curl -s -o /dev/null -w "%{http_code}\n" --interface 127.0.0.1 -H "X-Forwarded-F
 
 Режима с подменой часов **нет**, и эндпоинта для этого тоже нет. Для официальной проверки ничего настраивать не нужно.
 
-Если для отладки нужно сократить ожидания, интервалы можно уменьшить переменными окружения. Это меняет сами значения, а не часы, и **для проверки жюри не используется**:
-
-```bash
-OTP_TTL=10 SEND_COOLDOWN_1=3 SEND_COOLDOWN_2=5 SEND_COOLDOWN_3=8 SEND_WINDOW_SECONDS=30 \
-PHONE_BLOCK_SECONDS=20 IP_VERIFY_WINDOW=15 REDIS_KEY_PREFIX=fast \
-uvicorn app.main:app --host 127.0.0.1 --port 8001 --no-proxy-headers --no-access-log
-```
+Если для отладки нужно сократить ожидания, интервалы можно уменьшить переменными окружения в `docker-compose.yml` (`OTP_TTL`, `SEND_COOLDOWN_1…3`, `PHONE_BLOCK_SECONDS` и т. д.). Это меняет сами значения, а не часы, и **для проверки жюри не используется**.
 
 ---
 
@@ -227,44 +224,49 @@ Swagger: http://127.0.0.1:8000/docs. Демо-страница: http://127.0.0.1
 * **Хранение:** в Redis лежит только **HMAC-SHA256** от номера, уникального id запроса и кода; сравнение через `hmac.compare_digest()`. В Redis нет ни самого кода, ни номера, ни IP: в именах ключей только HMAC-псевдонимы.
 * **Атомарность:** выдача, проверка, погашение и счётчики выполняются Lua-скриптами Redis. Из 100 параллельных проверок верного кода успешна ровно одна, в том числе если API запущен в нескольких процессах.
 * **Устойчивость:** лимиты, паузы и блокировки переживают перезапуск API, потому что хранятся в Redis.
-* **Журнал безопасности:** события выдачи, проверки, ошибок, блокировок и лимитов без OTP, номеров и IP (только псевдонимы). Панель: http://127.0.0.1:8000/admin/dashboard, ключ — `ADMIN_API_KEY` из `.env`. Для API можно передать заголовок `X-Admin-Key`.
+* **Журнал безопасности:** события выдачи, проверки, ошибок, блокировок и лимитов без OTP, номеров и IP (только псевдонимы). Панель: http://127.0.0.1:8000/admin/dashboard, ключ — `ADMIN_API_KEY` из таблицы выше. Для API можно передать заголовок `X-Admin-Key`.
 * **Outbox:** файл не отдаётся по HTTP, исключён из Git и из Docker-образа.
 
 ---
 
 ## 8. Тесты и `attack.py`
 
-```bash
-pip install -r requirements-dev.txt
-pytest -q                     # 57 тестов на реальном Redis (БД 15, свой префикс ключей, временный outbox)
-RUN_SLOW=1 pytest -q          # + реальное ожидание 120 с
-```
-
-Тесты не трогают `./outbox/sms.jsonl` и рабочие ключи Redis. Тесты времени рассчитаны на стабильные системные часы. В WSL2 и некоторых виртуальных машинах часы подводятся скачками, и тест с запасом в доли секунды может изредка упасть. Сам сервис при этом ведёт себя правильно.
+`attack.py` уже лежит в образе и запускается внутри работающего контейнера API (он в той же host-сети, поэтому ходит с `127.0.0.1`, `127.0.0.2` и т. д.):
 
 ```bash
-python attack.py              # все атаки против http://127.0.0.1:8000, итог PASS/FAIL и код выхода
-python attack.py --mode single|distributed|replay|dualip|stress
+docker compose exec api python attack.py              # все атаки, итог PASS/FAIL и код выхода
+docker compose exec api python attack.py --mode single|distributed|replay|dualip|stress
+# при другом API_PORT добавьте: --target http://127.0.0.1:8010
 ```
 
-`attack.py` шлёт настоящие HTTP-запросы с разных loopback-адресов. Он принимает только локальные цели. Сценарии:
+Сценарии:
 * перебор одного номера;
 * 50 номеров с одного IP;
 * 100 параллельных проверок одного кода;
 * два IP и подделка `X-Forwarded-For`;
 * 1000 попыток.
 
----
+`attack.py` расходует лимиты, поэтому перед ручными проверками удобнее начать с чистого состояния: `docker compose down -v && docker compose up -d`.
 
-## 9. Docker (необязательно)
+Unit-тесты (pytest, 57 тестов на реальном Redis) запускаются без Docker и для проверки жюри не нужны:
 
 ```bash
-docker compose up --build     # Redis + API на 127.0.0.1:8000, outbox → ./outbox/sms.jsonl на хосте
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+TEST_REDIS_URL=redis://127.0.0.1:6390/15 pytest -q   # Redis из docker compose, отдельная БД 15
 ```
 
-⚠️ В этом режиме Docker делает NAT, и API видит адрес шлюза (`172.x.x.x`), а не `127.0.0.1` / `127.0.0.2`. **Для проверки лимитов по IP используйте запуск из раздела 1.**
+---
 
-На Linux есть вариант с host-сетью, где NAT отсутствует: `docker compose -f docker-compose.jury.yml up --build`. На Docker Desktop (Windows/macOS) host-сеть относится к внутренней VM, поэтому там используйте раздел 1.
+## 9. Docker Desktop (Windows / macOS)
+
+На Docker Desktop host-сеть относится к внутренней виртуальной машине, поэтому для Windows/macOS есть отдельный файл с обычной публикацией порта:
+
+```bash
+docker compose -f docker-compose.desktop.yml up -d --build
+```
+
+⚠️ В этом режиме Docker делает NAT, и API видит адрес шлюза (`172.x.x.x`) для всех клиентов. Отправка, проверка, outbox и панель работают, но **лимиты по IP (127.0.0.1 / 127.0.0.2) проверяйте на Linux** с основным `docker-compose.yml`.
 
 ---
 
@@ -272,14 +274,27 @@ docker compose up --build     # Redis + API на 127.0.0.1:8000, outbox → ./ou
 
 | Симптом | Решение |
 |---|---|
-| `503` на все запросы, `/health` → `"redis":"down"` | Redis не запущен: `redis-cli ping` должен ответить `PONG` (шаг 2 раздела 1) |
-| `Address already in use` | порт 8000 занят: запустите с `--port 8010` |
-| `ValidationError … app_env` при старте | задан неподдерживаемый `APP_ENV`; уберите его или поставьте `development` |
-| `curl: (45) bind failed` для `127.0.0.2` | на macOS нужен алиас `sudo ifconfig lo0 alias 127.0.0.2`; в Linux работает сразу |
-| у 127.0.0.1 и 127.0.0.2 общий лимит | API запущен в Docker bridge (NAT); запустите напрямую (раздел 1) |
+| `docker compose ps` показывает `starting` | подождите 5–10 секунд: API ждёт, пока Redis станет `healthy` |
+| `address already in use` | порт 8000 или 6390 занят: `API_PORT=8010 REDIS_PORT=6391 docker compose up -d --build` |
+| `503` на все запросы, `/health` → `"redis":"down"` | `docker compose ps` и `docker compose logs redis` |
+| `curl: (7) Failed to connect` к 127.0.0.1:8000 | запущен `docker-compose.desktop.yml` на Linux или контейнер ещё стартует: `docker compose logs api` |
+| `Permission denied` при чтении `outbox/sms.jsonl` | репозиторий клонирован от `root`: читайте через `sudo` или клонируйте от своего пользователя |
+| у 127.0.0.1 и 127.0.0.2 общий лимит | запущен вариант для Docker Desktop (NAT); используйте основной `docker-compose.yml` на Linux |
 | в outbox «чужой» код | берите последнюю запись **своего** номера (раздел 2), а не `tail -n 1` |
-| забыли ключ панели | `grep ADMIN_API_KEY .env` |
-| `./scripts/run_jury.sh: Permission denied` | запускайте через `bash`: `mkdir -p data outbox && bash scripts/run_jury.sh` (скрипт делает шаги 1–4 сам) |
+| лимиты остались после прошлых прогонов | `docker compose down -v && docker compose up -d` |
+
+<details>
+<summary>Запуск без Docker (для разработки)</summary>
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+redis-cli ping || redis-server --bind 127.0.0.1 --port 6379 --daemonize yes
+python scripts/init_env.py          # создаёт .env со случайными ключами
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers --no-access-log
+```
+
+</details>
 
 ---
 
@@ -294,7 +309,9 @@ app/
   lua/               issue_otp.lua, verify_otp.lua, rate_limit.lua — атомарные операции Redis
   templates/, static/  демо-страница и панель
 outbox/sms.jsonl     коды для жюри (создаётся при старте, в .gitignore)
-scripts/             init_env.py (создание .env), run_jury.sh
+scripts/             docker-entrypoint.sh, init_env.py, run_jury.sh
+docker-compose.yml   запуск для жюри (Linux, host-сеть, все настройки внутри)
+docker-compose.desktop.yml  вариант для Docker Desktop
 tests/               pytest
 attack.py            сценарии атак
 ```

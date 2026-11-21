@@ -3,7 +3,7 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HOST=0.0.0.0 \
+    HOST=127.0.0.1 \
     PORT=8000
 
 WORKDIR /app
@@ -12,15 +12,16 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY attack.py ./
-RUN mkdir -p /app/outbox /app/data \
- && chown -R 1000:1000 /app/outbox /app/data \
- && chmod 700 /app/outbox /app/data
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# strip CR in case the repo was checked out with CRLF line endings
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+ && chmod 755 /usr/local/bin/docker-entrypoint.sh \
+ && mkdir -p /app/outbox /app/data
 
-# runs as the host user (see `user:` in compose) so ./outbox/sms.jsonl stays readable on the host
-USER 1000:1000
-
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
+HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=10 \
   CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/health', timeout=2)"
 
-# python -m app == uvicorn app.main:app --no-proxy-headers (client IP = TCP peer)
-CMD ["sh", "-c", "python -m app --host \"$HOST\" --port \"$PORT\""]
+# python -m app == uvicorn app.main:app --no-proxy-headers --no-access-log
+# (client IP = real TCP peer address, X-Forwarded-For is ignored)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["sh", "-c", "exec python -m app --host \"$HOST\" --port \"$PORT\""]

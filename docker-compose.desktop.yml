@@ -1,0 +1,43 @@
+# Variant for Docker Desktop (Windows / macOS) with published ports:
+#
+#   docker compose -f docker-compose.desktop.yml up -d --build
+#
+# Here Docker NAT hides the client address: the API sees the Docker gateway
+# (e.g. 172.18.0.1) for every client, so the per-IP checks with 127.0.0.1 /
+# 127.0.0.2 must be done with the main docker-compose.yml on Linux.
+name: otp-secure-desktop
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build: .
+    environment:
+      APP_ENV: development
+      HOST: 0.0.0.0
+      PORT: "8000"
+      REDIS_URL: redis://redis:6379/0
+      OTP_HMAC_KEY: inai2026-demo-hmac-key-9f4c2a7e1b8d6053c4a1e7f2b9d8c6a5
+      ADMIN_API_KEY: inai2026-demo-admin-key-3e8b5d1f7a2c9064
+      OUTBOX_ENABLED: "true"
+      DEMO_MODE: "true"
+      TRUST_PROXY_HEADERS: "false"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./outbox:/app/outbox
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
